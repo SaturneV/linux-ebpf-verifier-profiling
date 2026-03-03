@@ -25884,6 +25884,8 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u3
 	env->bypass_spec_v1 = bpf_bypass_spec_v1(env->prog->aux->token);
 	env->bypass_spec_v4 = bpf_bypass_spec_v4(env->prog->aux->token);
 	env->bpf_capable = is_priv = bpf_token_capable(env->prog->aux->token, CAP_BPF);
+	pr_info("bpf_check: env allocated, prog=%p, length=%d, user flags=0x%x\n",
+	*prog, (*prog)->len, attr->prog_flags);
 
 	bpf_get_btf_vmlinux();
 
