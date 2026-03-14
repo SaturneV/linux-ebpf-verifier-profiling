@@ -20107,7 +20107,7 @@ static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_stat
 	if (old->callback_depth > cur->callback_depth) {
 		env->insn_aux_data[insn_idx].mismatch_callback_depth++;
 		env->total_mismatch_callback_depth++;
-		pr_debug("BPF_VERIFIER: insn %u: callback_depth mismatch (%u > %u)\n",
+		pr_info("BPF_VERIFIER: insn %u: callback_depth mismatch (%u > %u)\n",
 			 env->insn_idx, old->callback_depth, cur->callback_depth);
 		return false;
 	}
@@ -20118,7 +20118,7 @@ static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_stat
 			     &env->idmap_scratch, exact)) {
 			env->insn_aux_data[insn_idx].mismatch_registers++;
 			env->total_mismatch_registers++;
-			pr_debug("BPF_VERIFIER: insn %u: register %u mismatch\n",
+			pr_info("BPF_VERIFIER: insn %u: register %u mismatch\n",
 				 env->insn_idx, i);
 			return false;
 		}
@@ -20127,7 +20127,7 @@ static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_stat
 	if (!stacksafe(env, old, cur, &env->idmap_scratch, exact)) {
 		env->insn_aux_data[insn_idx].mismatch_stack++;
 		env->total_mismatch_stack++;
-		pr_debug("BPF_VERIFIER: insn %u: stack mismatch\n", env->insn_idx);
+		pr_info("BPF_VERIFIER: insn %u: stack mismatch\n", env->insn_idx);
 		return false;
 	}
 
@@ -20160,7 +20160,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 		env->insn_aux_data[env->insn_idx].mismatch_curframe++;
 		env->total_states_mismatched++;
 		env->total_mismatch_curframe++;
-		pr_debug("BPF_VERIFIER: insn %u: curframe mismatch (%d vs %d)\n",
+		pr_info("BPF_VERIFIER: insn %u: curframe mismatch (%d vs %d)\n",
 			 env->insn_idx, old->curframe, cur->curframe);
 		return false;
 	}
@@ -20175,7 +20175,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 		env->insn_aux_data[env->insn_idx].mismatch_speculative++;
 		env->total_states_mismatched++;
 		env->total_mismatch_speculative++;
-		pr_debug("BPF_VERIFIER: insn %u: speculative state mismatch\n", env->insn_idx);
+		pr_info("BPF_VERIFIER: insn %u: speculative state mismatch\n", env->insn_idx);
 		return false;
 	}
 
@@ -20184,7 +20184,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 		env->insn_aux_data[env->insn_idx].mismatch_sleepable++;
 		env->total_states_mismatched++;
 		env->total_mismatch_sleepable++;
-		pr_debug("BPF_VERIFIER: insn %u: sleepable state mismatch\n", env->insn_idx);
+		pr_info("BPF_VERIFIER: insn %u: sleepable state mismatch\n", env->insn_idx);
 		return false;
 	}
 
@@ -20193,7 +20193,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 		env->insn_aux_data[env->insn_idx].mismatch_refsafe++;
 		env->total_states_mismatched++;
 		env->total_mismatch_refsafe++;
-		pr_debug("BPF_VERIFIER: insn %u: refsafe mismatch\n", env->insn_idx);
+		pr_info("BPF_VERIFIER: insn %u: refsafe mismatch\n", env->insn_idx);
 		return false;
 	}
 
@@ -20207,7 +20207,7 @@ static bool states_equal(struct bpf_verifier_env *env,
 			env->insn_aux_data[env->insn_idx].mismatch_callsite++;
 			env->total_states_mismatched++;
 			env->total_mismatch_callsite++;
-			pr_debug("BPF_VERIFIER: insn %u frame %d: callsite mismatch\n",
+			pr_info("BPF_VERIFIER: insn %u frame %d: callsite mismatch\n",
 				 env->insn_idx, i);
 			return false;
 		}
