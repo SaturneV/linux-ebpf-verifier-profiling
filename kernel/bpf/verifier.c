@@ -20104,17 +20104,32 @@ static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_stat
 	u16 live_regs = env->insn_aux_data[insn_idx].live_regs_before;
 	u16 i;
 
-	if (old->callback_depth > cur->callback_depth)
+	if (old->callback_depth > cur->callback_depth) {
+		env->insn_aux_data[insn_idx].mismatch_callback_depth++;
+		env->total_mismatch_callback_depth++;
+		pr_debug("BPF_VERIFIER: insn %u: callback_depth mismatch (%u > %u)\n",
+			 env->insn_idx, old->callback_depth, cur->callback_depth);
 		return false;
+	}
 
-	for (i = 0; i < MAX_BPF_REG; i++)
+	for (i = 0; i < MAX_BPF_REG; i++) {
 		if (((1 << i) & live_regs) &&
 		    !regsafe(env, &old->regs[i], &cur->regs[i],
-			     &env->idmap_scratch, exact))
+			     &env->idmap_scratch, exact)) {
+			env->insn_aux_data[insn_idx].mismatch_registers++;
+			env->total_mismatch_registers++;
+			pr_debug("BPF_VERIFIER: insn %u: register %u mismatch\n",
+				 env->insn_idx, i);
 			return false;
+		}
+	}
 
-	if (!stacksafe(env, old, cur, &env->idmap_scratch, exact))
+	if (!stacksafe(env, old, cur, &env->idmap_scratch, exact)) {
+		env->insn_aux_data[insn_idx].mismatch_stack++;
+		env->total_mismatch_stack++;
+		pr_debug("BPF_VERIFIER: insn %u: stack mismatch\n", env->insn_idx);
 		return false;
+	}
 
 	return true;
 }
@@ -20134,34 +20149,85 @@ static bool states_equal(struct bpf_verifier_env *env,
 {
 	u32 insn_idx;
 	int i;
+	bool result = true;
 
-	if (old->curframe != cur->curframe)
+	/* Track state comparison for this instruction and globally */
+	env->insn_aux_data[env->insn_idx].states_compared++;
+	env->total_states_compared++;
+
+	if (old->curframe != cur->curframe) {
+		env->insn_aux_data[env->insn_idx].states_mismatched++;
+		env->insn_aux_data[env->insn_idx].mismatch_curframe++;
+		env->total_states_mismatched++;
+		env->total_mismatch_curframe++;
+		pr_debug("BPF_VERIFIER: insn %u: curframe mismatch (%d vs %d)\n",
+			 env->insn_idx, old->curframe, cur->curframe);
 		return false;
+	}
 
 	reset_idmap_scratch(env);
 
 	/* Verification state from speculative execution simulation
 	 * must never prune a non-speculative execution one.
 	 */
-	if (old->speculative && !cur->speculative)
+	if (old->speculative && !cur->speculative) {
+		env->insn_aux_data[env->insn_idx].states_mismatched++;
+		env->insn_aux_data[env->insn_idx].mismatch_speculative++;
+		env->total_states_mismatched++;
+		env->total_mismatch_speculative++;
+		pr_debug("BPF_VERIFIER: insn %u: speculative state mismatch\n", env->insn_idx);
 		return false;
+	}
 
-	if (old->in_sleepable != cur->in_sleepable)
+	if (old->in_sleepable != cur->in_sleepable) {
+		env->insn_aux_data[env->insn_idx].states_mismatched++;
+		env->insn_aux_data[env->insn_idx].mismatch_sleepable++;
+		env->total_states_mismatched++;
+		env->total_mismatch_sleepable++;
+		pr_debug("BPF_VERIFIER: insn %u: sleepable state mismatch\n", env->insn_idx);
 		return false;
+	}
 
-	if (!refsafe(old, cur, &env->idmap_scratch))
+	if (!refsafe(old, cur, &env->idmap_scratch)) {
+		env->insn_aux_data[env->insn_idx].states_mismatched++;
+		env->insn_aux_data[env->insn_idx].mismatch_refsafe++;
+		env->total_states_mismatched++;
+		env->total_mismatch_refsafe++;
+		pr_debug("BPF_VERIFIER: insn %u: refsafe mismatch\n", env->insn_idx);
 		return false;
+	}
 
 	/* for states to be equal callsites have to be the same
 	 * and all frame states need to be equivalent
 	 */
 	for (i = 0; i <= old->curframe; i++) {
 		insn_idx = frame_insn_idx(old, i);
-		if (old->frame[i]->callsite != cur->frame[i]->callsite)
+		if (old->frame[i]->callsite != cur->frame[i]->callsite) {
+			env->insn_aux_data[env->insn_idx].states_mismatched++;
+			env->insn_aux_data[env->insn_idx].mismatch_callsite++;
+			env->total_states_mismatched++;
+			env->total_mismatch_callsite++;
+			pr_debug("BPF_VERIFIER: insn %u frame %d: callsite mismatch\n",
+				 env->insn_idx, i);
 			return false;
-		if (!func_states_equal(env, old->frame[i], cur->frame[i], insn_idx, exact))
+		}
+		if (!func_states_equal(env, old->frame[i], cur->frame[i], insn_idx, exact)) {
+			env->insn_aux_data[env->insn_idx].states_mismatched++;
+			env->total_states_mismatched++;
 			return false;
+		}
 	}
+
+	/* States matched successfully */
+	env->insn_aux_data[env->insn_idx].states_matched++;
+	env->total_states_matched++;
+
+	/* Track instruction with maximum mismatches */
+	if (env->insn_aux_data[env->insn_idx].states_mismatched > env->max_mismatch_count) {
+		env->max_mismatch_count = env->insn_aux_data[env->insn_idx].states_mismatched;
+		env->max_mismatch_insn_idx = env->insn_idx;
+	}
+
 	return true;
 }
 
@@ -25842,6 +25908,64 @@ exit:
 	return err;
 }
 
+/* Report per-instruction and global state comparison statistics */
+static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
+{
+	u32 i, insn_cnt;
+
+	if (env->total_states_compared == 0)
+		return;
+
+	insn_cnt = env->prog->len;
+
+	pr_info("BPF_VERIFIER STATE COMPARISON STATISTICS:\n");
+	pr_info("  Program length: %u instructions\n", insn_cnt);
+	pr_info("\n=== GLOBAL STATISTICS ===\n");
+	pr_info("  Total state comparisons: %u\n", env->total_states_compared);
+	pr_info("  States matched: %u (%.1f%%)\n",
+		env->total_states_matched,
+		env->total_states_compared > 0 ?
+		(100 * env->total_states_matched) / env->total_states_compared : 0);
+	pr_info("  States mismatched: %u (%.1f%%)\n",
+		env->total_states_mismatched,
+		env->total_states_compared > 0 ?
+		(100 * env->total_states_mismatched) / env->total_states_compared : 0);
+
+	pr_info("\n  Mismatch breakdown (global):\n");
+	pr_info("    callback_depth: %u\n", env->total_mismatch_callback_depth);
+	pr_info("    curframe: %u\n", env->total_mismatch_curframe);
+	pr_info("    speculative: %u\n", env->total_mismatch_speculative);
+	pr_info("    sleepable: %u\n", env->total_mismatch_sleepable);
+	pr_info("    refsafe: %u\n", env->total_mismatch_refsafe);
+	pr_info("    callsite: %u\n", env->total_mismatch_callsite);
+	pr_info("    registers: %u\n", env->total_mismatch_registers);
+	pr_info("    stack: %u\n", env->total_mismatch_stack);
+
+	pr_info("\n  Instruction with most mismatches: insn %u (mismatches: %u)\n",
+		env->max_mismatch_insn_idx, env->max_mismatch_count);
+
+	/* Report per-instruction statistics for instructions with comparisons */
+	pr_info("\n=== PER-INSTRUCTION STATISTICS ===\n");
+	for (i = 0; i < insn_cnt; i++) {
+		if (env->insn_aux_data[i].states_compared > 0) {
+			pr_info("  insn %3u: compared=%u matched=%u mismatched=%u "
+				"(regs=%u stack=%u cbdepth=%u curframe=%u spec=%u sleepable=%u refsafe=%u callsite=%u)\n",
+				i,
+				env->insn_aux_data[i].states_compared,
+				env->insn_aux_data[i].states_matched,
+				env->insn_aux_data[i].states_mismatched,
+				env->insn_aux_data[i].mismatch_registers,
+				env->insn_aux_data[i].mismatch_stack,
+				env->insn_aux_data[i].mismatch_callback_depth,
+				env->insn_aux_data[i].mismatch_curframe,
+				env->insn_aux_data[i].mismatch_speculative,
+				env->insn_aux_data[i].mismatch_sleepable,
+				env->insn_aux_data[i].mismatch_refsafe,
+				env->insn_aux_data[i].mismatch_callsite);
+		}
+	}
+}
+
 int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr, __u32 uattr_size)
 {
 	u64 start_time = ktime_get_ns();
@@ -26043,6 +26167,7 @@ skip_full_check:
 
 	env->verification_time = ktime_get_ns() - start_time;
 	print_verification_stats(env);
+	bpf_verifier_log_state_stats(env);
 	env->prog->aux->verified_insns = env->insn_processed;
 
 	/* preserve original error even if log finalization is successful */

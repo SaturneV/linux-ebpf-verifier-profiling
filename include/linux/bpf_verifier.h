@@ -595,6 +595,19 @@ struct bpf_insn_aux_data {
 	u32 scc;
 	/* registers alive before this instruction. */
 	u16 live_regs_before;
+
+	/* State comparison profiling per instruction */
+	u32 states_compared;       /* Total state comparisons at this insn */
+	u32 states_matched;        /* Matched states at this insn */
+	u32 states_mismatched;     /* Mismatched states at this insn */
+	u32 mismatch_callback_depth;
+	u32 mismatch_curframe;
+	u32 mismatch_speculative;
+	u32 mismatch_sleepable;
+	u32 mismatch_refsafe;
+	u32 mismatch_callsite;
+	u32 mismatch_registers;
+	u32 mismatch_stack;
 };
 
 #define MAX_USED_MAPS 64 /* max number of maps accessed by one eBPF program */
@@ -851,6 +864,23 @@ struct bpf_verifier_env {
 	u32 scc_cnt;
 	struct bpf_iarray *succ;
 	struct bpf_iarray *gotox_tmp_buf;
+
+	/* Global state comparison profiling counters */
+	u32 total_states_compared;
+	u32 total_states_matched;
+	u32 total_states_mismatched;
+	u32 total_mismatch_callback_depth;
+	u32 total_mismatch_curframe;
+	u32 total_mismatch_speculative;
+	u32 total_mismatch_sleepable;
+	u32 total_mismatch_refsafe;
+	u32 total_mismatch_callsite;
+	u32 total_mismatch_registers;
+	u32 total_mismatch_stack;
+
+	/* Track instruction with most mismatches for reporting */
+	u32 max_mismatch_insn_idx;
+	u32 max_mismatch_count;
 };
 
 static inline struct bpf_func_info_aux *subprog_aux(struct bpf_verifier_env *env, int subprog)
