@@ -25913,11 +25913,11 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 	pr_info("  States matched: %u (%.1f%%)\n",
 		env->total_states_matched,
 		env->total_states_compared > 0 ?
-		(100 * env->total_states_matched) / env->total_states_compared : 0);
+		(100.0f * env->total_states_matched) / env->total_states_compared : 0.0f);
 	pr_info("  States mismatched: %u (%.1f%%)\n",
 		env->total_states_mismatched,
 		env->total_states_compared > 0 ?
-		(100 * env->total_states_mismatched) / env->total_states_compared : 0);
+		(100.0f * env->total_states_mismatched) / env->total_states_compared : 0.0f);
 
 	pr_info("\n  Mismatch breakdown (global):\n");
 	pr_info("    callback_depth: %u\n", env->total_mismatch_callback_depth);
