@@ -25906,6 +25906,7 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 	insn_cnt = env->prog->len;
 
 	pr_info("BPF_VERIFIER STATE COMPARISON STATISTICS:\n");
+	pr_info("  Program name: %s\n", env->prog->aux->name);
 	pr_info("  Program length: %u instructions\n", insn_cnt);
 	pr_info("\n=== GLOBAL STATISTICS ===\n");
 	pr_info("  Total state comparisons: %u\n", env->total_states_compared);
