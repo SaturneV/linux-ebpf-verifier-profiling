@@ -25904,12 +25904,14 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 {
 	u32 i, insn_cnt;
 
-	if (env->total_states_compared == 0)
-		return;
-
 	insn_cnt = env->prog->len;
 
-	/* Emit aggregated per-program statistics via tracepoint */
+	/* DEBUG: Print to kernel log to verify function is called */
+	pr_info("[BPF_TELEMETRY] prog_name=%s prog_len=%u total_compared=%u total_matched=%u total_mismatched=%u\n",
+		env->prog->aux->name, insn_cnt,
+		env->total_states_compared, env->total_states_matched, env->total_states_mismatched);
+
+	/* Emit aggregated per-program statistics via tracepoint - always emit for visibility */
 	trace_bpf_verifier_prog_stats(
 		env->prog->aux->name,
 		insn_cnt,
