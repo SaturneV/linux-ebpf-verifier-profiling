@@ -33,6 +33,10 @@
 
 #include "disasm.h"
 
+/* Include tracepoint definitions for verifier telemetry */
+#define CREATE_TRACE_POINTS
+#include <trace/events/bpf_verifier.h>
+
 static const struct bpf_verifier_ops * const bpf_verifier_ops[] = {
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	[_id] = & _name ## _verifier_ops,
@@ -25895,7 +25899,7 @@ exit:
 	return err;
 }
 
-/* Report per-instruction and global state comparison statistics */
+/* Emit verifier state comparison statistics through structured tracepoints */
 static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 {
 	u32 i, insn_cnt;
@@ -25905,55 +25909,41 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 
 	insn_cnt = env->prog->len;
 
-	pr_info("BPF_VERIFIER STATE COMPARISON STATISTICS:\n");
-	pr_info("  Program name: %s\n", env->prog->aux->name);
-	pr_info("  Program length: %u instructions\n", insn_cnt);
-	pr_info("\n=== GLOBAL STATISTICS ===\n");
-	pr_info("  Total state comparisons: %u\n", env->total_states_compared);
-	pr_info("  States matched: %u (%u/%u = %u%%)\n",
-		env->total_states_matched,
-		env->total_states_matched,
+	/* Emit aggregated per-program statistics via tracepoint */
+	trace_bpf_verifier_prog_stats(
+		env->prog->aux->name,
+		insn_cnt,
 		env->total_states_compared,
-		env->total_states_compared > 0 ?
-		(100 * env->total_states_matched) / env->total_states_compared : 0);
-	pr_info("  States mismatched: %u (%u/%u = %u%%)\n",
+		env->total_states_matched,
 		env->total_states_mismatched,
-		env->total_states_mismatched,
-		env->total_states_compared,
-		env->total_states_compared > 0 ?
-		(100 * env->total_states_mismatched) / env->total_states_compared : 0);
+		env->total_mismatch_callback_depth,
+		env->total_mismatch_curframe,
+		env->total_mismatch_speculative,
+		env->total_mismatch_sleepable,
+		env->total_mismatch_refsafe,
+		env->total_mismatch_callsite,
+		env->total_mismatch_registers,
+		env->total_mismatch_stack,
+		env->max_mismatch_insn_idx,
+		env->max_mismatch_count);
 
-	pr_info("\n  Mismatch breakdown (global):\n");
-	pr_info("    callback_depth: %u\n", env->total_mismatch_callback_depth);
-	pr_info("    curframe: %u\n", env->total_mismatch_curframe);
-	pr_info("    speculative: %u\n", env->total_mismatch_speculative);
-	pr_info("    sleepable: %u\n", env->total_mismatch_sleepable);
-	pr_info("    refsafe: %u\n", env->total_mismatch_refsafe);
-	pr_info("    callsite: %u\n", env->total_mismatch_callsite);
-	pr_info("    registers: %u\n", env->total_mismatch_registers);
-	pr_info("    stack: %u\n", env->total_mismatch_stack);
-
-	pr_info("\n  Instruction with most mismatches: insn %u (mismatches: %u)\n",
-		env->max_mismatch_insn_idx, env->max_mismatch_count);
-
-	/* Report per-instruction statistics for instructions with comparisons */
-	pr_info("\n=== PER-INSTRUCTION STATISTICS ===\n");
+	/* Emit aggregated per-instruction statistics via tracepoint */
 	for (i = 0; i < insn_cnt; i++) {
 		if (env->insn_aux_data[i].states_compared > 0) {
-			pr_info("  insn %3u: compared=%u matched=%u mismatched=%u "
-				"(regs=%u stack=%u cbdepth=%u curframe=%u spec=%u sleepable=%u refsafe=%u callsite=%u)\n",
+			trace_bpf_verifier_insn_stats(
+				env->prog->aux->name,
 				i,
 				env->insn_aux_data[i].states_compared,
 				env->insn_aux_data[i].states_matched,
 				env->insn_aux_data[i].states_mismatched,
-				env->insn_aux_data[i].mismatch_registers,
-				env->insn_aux_data[i].mismatch_stack,
 				env->insn_aux_data[i].mismatch_callback_depth,
 				env->insn_aux_data[i].mismatch_curframe,
 				env->insn_aux_data[i].mismatch_speculative,
 				env->insn_aux_data[i].mismatch_sleepable,
 				env->insn_aux_data[i].mismatch_refsafe,
-				env->insn_aux_data[i].mismatch_callsite);
+				env->insn_aux_data[i].mismatch_callsite,
+				env->insn_aux_data[i].mismatch_registers,
+				env->insn_aux_data[i].mismatch_stack);
 		}
 	}
 }
