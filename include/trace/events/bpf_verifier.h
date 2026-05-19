@@ -46,7 +46,7 @@ TRACE_EVENT(bpf_verifier_prog_stats,
 	),
 
 	TP_fast_assign(
-		__assign_str(prog_name, prog_name);
+		__assign_str(prog_name);
 		__entry->prog_len = prog_len;
 		__entry->total_states_compared = total_states_compared;
 		__entry->total_states_matched = total_states_matched;
@@ -109,7 +109,7 @@ TRACE_EVENT(bpf_verifier_insn_stats,
 	),
 
 	TP_fast_assign(
-		__assign_str(prog_name, prog_name);
+		__assign_str(prog_name);
 		__entry->insn_idx = insn_idx;
 		__entry->states_compared = states_compared;
 		__entry->states_matched = states_matched;
