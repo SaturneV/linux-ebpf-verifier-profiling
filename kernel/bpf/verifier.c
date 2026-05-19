@@ -25916,14 +25916,11 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 		env->total_states_compared,
 		env->total_states_matched,
 		env->total_states_mismatched,
-		env->total_mismatch_callback_depth,
-		env->total_mismatch_curframe,
-		env->total_mismatch_speculative,
-		env->total_mismatch_sleepable,
-		env->total_mismatch_refsafe,
-		env->total_mismatch_callsite,
-		env->total_mismatch_registers,
-		env->total_mismatch_stack,
+		/* Pack mismatch categories into u64 pairs to stay within 12-arg limit */
+		((u64)env->total_mismatch_curframe << 32) | env->total_mismatch_callback_depth,
+		((u64)env->total_mismatch_sleepable << 32) | env->total_mismatch_speculative,
+		((u64)env->total_mismatch_callsite << 32) | env->total_mismatch_refsafe,
+		((u64)env->total_mismatch_stack << 32) | env->total_mismatch_registers,
 		env->max_mismatch_insn_idx,
 		env->max_mismatch_count);
 
@@ -25936,14 +25933,11 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 				env->insn_aux_data[i].states_compared,
 				env->insn_aux_data[i].states_matched,
 				env->insn_aux_data[i].states_mismatched,
-				env->insn_aux_data[i].mismatch_callback_depth,
-				env->insn_aux_data[i].mismatch_curframe,
-				env->insn_aux_data[i].mismatch_speculative,
-				env->insn_aux_data[i].mismatch_sleepable,
-				env->insn_aux_data[i].mismatch_refsafe,
-				env->insn_aux_data[i].mismatch_callsite,
-				env->insn_aux_data[i].mismatch_registers,
-				env->insn_aux_data[i].mismatch_stack);
+				/* Pack mismatch categories into u64 pairs to stay within 12-arg limit */
+				((u64)env->insn_aux_data[i].mismatch_curframe << 32) | env->insn_aux_data[i].mismatch_callback_depth,
+				((u64)env->insn_aux_data[i].mismatch_sleepable << 32) | env->insn_aux_data[i].mismatch_speculative,
+				((u64)env->insn_aux_data[i].mismatch_callsite << 32) | env->insn_aux_data[i].mismatch_refsafe,
+				((u64)env->insn_aux_data[i].mismatch_stack << 32) | env->insn_aux_data[i].mismatch_registers);
 		}
 	}
 }
