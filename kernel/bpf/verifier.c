@@ -26060,7 +26060,12 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 		((u64)env->total_mismatch_callsite << 32) | env->total_mismatch_refsafe,
 		((u64)env->total_mismatch_stack << 32) | env->total_mismatch_registers,
 		env->max_mismatch_insn_idx,
-		env->max_mismatch_count);
+		env->max_mismatch_count,
+		/* Pack register field mismatches into u64 pairs */
+		((u64)env->total_reg_mismatch_range << 32) | env->total_reg_mismatch_type,
+		((u64)env->total_reg_mismatch_id << 32) | env->total_reg_mismatch_var_off,
+		((u64)env->total_reg_mismatch_offset << 32) | env->total_reg_mismatch_ref_obj_id,
+		((u64)env->total_reg_mismatch_other << 32) | env->total_reg_mismatch_frameno);
 
 	/* Log field-specific register mismatch stats to kernel log */
 	pr_info("[BPF_REG_FIELD_MISMATCH] type=%u range=%u var_off=%u id=%u ref_obj_id=%u offset=%u frameno=%u other=%u\n",
@@ -26076,17 +26081,22 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 	/* Emit aggregated per-instruction statistics via tracepoint */
 	for (i = 0; i < insn_cnt; i++) {
 		if (env->insn_aux_data[i].states_compared > 0) {
-			trace_bpf_verifier_insn_stats(
-				env->prog->aux->name,
-				i,
-				env->insn_aux_data[i].states_compared,
-				env->insn_aux_data[i].states_matched,
-				env->insn_aux_data[i].states_mismatched,
-				/* Pack mismatch categories into u64 pairs to stay within 12-arg limit */
-				((u64)env->insn_aux_data[i].mismatch_curframe << 32) | env->insn_aux_data[i].mismatch_callback_depth,
-				((u64)env->insn_aux_data[i].mismatch_sleepable << 32) | env->insn_aux_data[i].mismatch_speculative,
-				((u64)env->insn_aux_data[i].mismatch_callsite << 32) | env->insn_aux_data[i].mismatch_refsafe,
-				((u64)env->insn_aux_data[i].mismatch_stack << 32) | env->insn_aux_data[i].mismatch_registers);
+		trace_bpf_verifier_insn_stats(
+			env->prog->aux->name,
+			i,
+			env->insn_aux_data[i].states_compared,
+			env->insn_aux_data[i].states_matched,
+			env->insn_aux_data[i].states_mismatched,
+			/* Pack mismatch categories into u64 pairs to stay within 12-arg limit */
+			((u64)env->insn_aux_data[i].mismatch_curframe << 32) | env->insn_aux_data[i].mismatch_callback_depth,
+			((u64)env->insn_aux_data[i].mismatch_sleepable << 32) | env->insn_aux_data[i].mismatch_speculative,
+			((u64)env->insn_aux_data[i].mismatch_callsite << 32) | env->insn_aux_data[i].mismatch_refsafe,
+			((u64)env->insn_aux_data[i].mismatch_stack << 32) | env->insn_aux_data[i].mismatch_registers,
+			/* Pack register field mismatches into u64 pairs */
+			((u64)env->insn_aux_data[i].reg_mismatch_range << 32) | env->insn_aux_data[i].reg_mismatch_type,
+			((u64)env->insn_aux_data[i].reg_mismatch_id << 32) | env->insn_aux_data[i].reg_mismatch_var_off,
+			((u64)env->insn_aux_data[i].reg_mismatch_offset << 32) | env->insn_aux_data[i].reg_mismatch_ref_obj_id,
+			((u64)env->insn_aux_data[i].reg_mismatch_other << 32) | env->insn_aux_data[i].reg_mismatch_frameno);
 
 			/* Log field-specific mismatches for this instruction if any */
 			if (env->insn_aux_data[i].reg_mismatch_type ||
