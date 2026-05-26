@@ -19717,6 +19717,137 @@ enum exact_level {
 	RANGE_WITHIN
 };
 
+/* Enum to track which register field caused a mismatch */
+enum reg_mismatch_field {
+	REG_MISMATCH_TYPE,
+	REG_MISMATCH_RANGE,
+	REG_MISMATCH_VAR_OFF,
+	REG_MISMATCH_ID,
+	REG_MISMATCH_REF_OBJ_ID,
+	REG_MISMATCH_OFFSET,
+	REG_MISMATCH_FRAMENO,
+	REG_MISMATCH_OTHER,
+	REG_MISMATCH_NONE,
+};
+
+/* Track which specific field caused the register mismatch */
+static inline void track_reg_mismatch_field(struct bpf_verifier_env *env,
+					    u32 insn_idx,
+					    enum reg_mismatch_field field)
+{
+	if (!env || field == REG_MISMATCH_NONE)
+		return;
+
+	switch (field) {
+	case REG_MISMATCH_TYPE:
+		env->insn_aux_data[insn_idx].reg_mismatch_type++;
+		env->total_reg_mismatch_type++;
+		break;
+	case REG_MISMATCH_RANGE:
+		env->insn_aux_data[insn_idx].reg_mismatch_range++;
+		env->total_reg_mismatch_range++;
+		break;
+	case REG_MISMATCH_VAR_OFF:
+		env->insn_aux_data[insn_idx].reg_mismatch_var_off++;
+		env->total_reg_mismatch_var_off++;
+		break;
+	case REG_MISMATCH_ID:
+		env->insn_aux_data[insn_idx].reg_mismatch_id++;
+		env->total_reg_mismatch_id++;
+		break;
+	case REG_MISMATCH_REF_OBJ_ID:
+		env->insn_aux_data[insn_idx].reg_mismatch_ref_obj_id++;
+		env->total_reg_mismatch_ref_obj_id++;
+		break;
+	case REG_MISMATCH_OFFSET:
+		env->insn_aux_data[insn_idx].reg_mismatch_offset++;
+		env->total_reg_mismatch_offset++;
+		break;
+	case REG_MISMATCH_FRAMENO:
+		env->insn_aux_data[insn_idx].reg_mismatch_frameno++;
+		env->total_reg_mismatch_frameno++;
+		break;
+	case REG_MISMATCH_OTHER:
+		env->insn_aux_data[insn_idx].reg_mismatch_other++;
+		env->total_reg_mismatch_other++;
+		break;
+	default:
+		break;
+	}
+}
+
+/* Wrapper around regsafe that tracks which field caused mismatch */
+static bool regsafe_with_tracking(struct bpf_verifier_env *env,
+				   struct bpf_reg_state *rold,
+				   struct bpf_reg_state *rcur,
+				   struct bpf_idmap *idmap,
+				   enum exact_level exact,
+				   u32 insn_idx,
+				   enum reg_mismatch_field *mismatch_field_out)
+{
+	bool result;
+	enum reg_mismatch_field field_matched = REG_MISMATCH_NONE;
+
+	/* Call the original regsafe function */
+	result = regsafe(env, rold, rcur, idmap, exact);
+
+	/* If regsafe returned true, no mismatch */
+	if (result)
+		return true;
+
+	/* Determine which field caused the mismatch */
+	/* Check type mismatch */
+	if (rold->type != rcur->type) {
+		field_matched = REG_MISMATCH_TYPE;
+	}
+	/* Check for range mismatch (min/max values) */
+	else if (rold->smin_value != rcur->smin_value ||
+		 rold->smax_value != rcur->smax_value ||
+		 rold->umin_value != rcur->umin_value ||
+		 rold->umax_value != rcur->umax_value ||
+		 rold->s32_min_value != rcur->s32_min_value ||
+		 rold->s32_max_value != rcur->s32_max_value ||
+		 rold->u32_min_value != rcur->u32_min_value ||
+		 rold->u32_max_value != rcur->u32_max_value) {
+		field_matched = REG_MISMATCH_RANGE;
+	}
+	/* Check for variable offset mismatch */
+	else if (rold->var_off.value != rcur->var_off.value ||
+		 rold->var_off.mask != rcur->var_off.mask) {
+		field_matched = REG_MISMATCH_VAR_OFF;
+	}
+	/* Check for offset field mismatch */
+	else if (rold->off != rcur->off) {
+		field_matched = REG_MISMATCH_OFFSET;
+	}
+	/* Check for id mismatch */
+	else if (rold->id != rcur->id) {
+		field_matched = REG_MISMATCH_ID;
+	}
+	/* Check for ref_obj_id mismatch */
+	else if (rold->ref_obj_id != rcur->ref_obj_id) {
+		field_matched = REG_MISMATCH_REF_OBJ_ID;
+	}
+	/* Check for frameno mismatch (only for STACK pointers) */
+	else if (base_type(rold->type) == PTR_TO_STACK &&
+		 rold->frameno != rcur->frameno) {
+		field_matched = REG_MISMATCH_FRAMENO;
+	}
+	/* Default to other if we couldn't determine the specific field */
+	else {
+		field_matched = REG_MISMATCH_OTHER;
+	}
+
+	/* Track the mismatch */
+	if (field_matched != REG_MISMATCH_NONE) {
+		track_reg_mismatch_field(env, insn_idx, field_matched);
+		if (mismatch_field_out)
+			*mismatch_field_out = field_matched;
+	}
+
+	return false;
+}
+
 /* Returns true if (rold safe implies rcur safe) */
 static bool regsafe(struct bpf_verifier_env *env, struct bpf_reg_state *rold,
 		    struct bpf_reg_state *rcur, struct bpf_idmap *idmap,
@@ -20116,8 +20247,8 @@ static bool func_states_equal(struct bpf_verifier_env *env, struct bpf_func_stat
 
 	for (i = 0; i < MAX_BPF_REG; i++) {
 		if (((1 << i) & live_regs) &&
-		    !regsafe(env, &old->regs[i], &cur->regs[i],
-			     &env->idmap_scratch, exact)) {
+		    !regsafe_with_tracking(env, &old->regs[i], &cur->regs[i],
+					   &env->idmap_scratch, exact, insn_idx, NULL)) {
 			env->insn_aux_data[insn_idx].mismatch_registers++;
 			env->total_mismatch_registers++;
 			return false;
@@ -25926,6 +26057,17 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 		env->max_mismatch_insn_idx,
 		env->max_mismatch_count);
 
+	/* Log field-specific register mismatch stats to kernel log */
+	pr_info("[BPF_REG_FIELD_MISMATCH] type=%u range=%u var_off=%u id=%u ref_obj_id=%u offset=%u frameno=%u other=%u\n",
+		env->total_reg_mismatch_type,
+		env->total_reg_mismatch_range,
+		env->total_reg_mismatch_var_off,
+		env->total_reg_mismatch_id,
+		env->total_reg_mismatch_ref_obj_id,
+		env->total_reg_mismatch_offset,
+		env->total_reg_mismatch_frameno,
+		env->total_reg_mismatch_other);
+
 	/* Emit aggregated per-instruction statistics via tracepoint */
 	for (i = 0; i < insn_cnt; i++) {
 		if (env->insn_aux_data[i].states_compared > 0) {
@@ -25940,6 +26082,27 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 				((u64)env->insn_aux_data[i].mismatch_sleepable << 32) | env->insn_aux_data[i].mismatch_speculative,
 				((u64)env->insn_aux_data[i].mismatch_callsite << 32) | env->insn_aux_data[i].mismatch_refsafe,
 				((u64)env->insn_aux_data[i].mismatch_stack << 32) | env->insn_aux_data[i].mismatch_registers);
+
+			/* Log field-specific mismatches for this instruction if any */
+			if (env->insn_aux_data[i].reg_mismatch_type ||
+			    env->insn_aux_data[i].reg_mismatch_range ||
+			    env->insn_aux_data[i].reg_mismatch_var_off ||
+			    env->insn_aux_data[i].reg_mismatch_id ||
+			    env->insn_aux_data[i].reg_mismatch_ref_obj_id ||
+			    env->insn_aux_data[i].reg_mismatch_offset ||
+			    env->insn_aux_data[i].reg_mismatch_frameno ||
+			    env->insn_aux_data[i].reg_mismatch_other) {
+				pr_info("[BPF_INSN_REG_FIELD_MISMATCH] insn=%u type=%u range=%u var_off=%u id=%u ref_obj_id=%u offset=%u frameno=%u other=%u\n",
+					i,
+					env->insn_aux_data[i].reg_mismatch_type,
+					env->insn_aux_data[i].reg_mismatch_range,
+					env->insn_aux_data[i].reg_mismatch_var_off,
+					env->insn_aux_data[i].reg_mismatch_id,
+					env->insn_aux_data[i].reg_mismatch_ref_obj_id,
+					env->insn_aux_data[i].reg_mismatch_offset,
+					env->insn_aux_data[i].reg_mismatch_frameno,
+					env->insn_aux_data[i].reg_mismatch_other);
+			}
 		}
 	}
 }

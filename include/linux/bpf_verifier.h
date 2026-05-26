@@ -608,6 +608,16 @@ struct bpf_insn_aux_data {
 	u32 mismatch_callsite;
 	u32 mismatch_registers;
 	u32 mismatch_stack;
+
+	/* Per-instruction tracking of specific field mismatches */
+	u32 reg_mismatch_type;        /* Register type mismatch */
+	u32 reg_mismatch_range;       /* Range mismatch (min/max values) */
+	u32 reg_mismatch_var_off;     /* Variable offset mismatch */
+	u32 reg_mismatch_id;          /* ID or ID mapping mismatch */
+	u32 reg_mismatch_ref_obj_id;  /* Reference object ID mismatch */
+	u32 reg_mismatch_offset;      /* Offset field mismatch */
+	u32 reg_mismatch_frameno;     /* Frame number mismatch */
+	u32 reg_mismatch_other;       /* Other register field mismatch */
 };
 
 #define MAX_USED_MAPS 64 /* max number of maps accessed by one eBPF program */
@@ -877,6 +887,16 @@ struct bpf_verifier_env {
 	u32 total_mismatch_callsite;
 	u32 total_mismatch_registers;
 	u32 total_mismatch_stack;
+
+	/* Global tracking of specific field mismatches */
+	u32 total_reg_mismatch_type;
+	u32 total_reg_mismatch_range;
+	u32 total_reg_mismatch_var_off;
+	u32 total_reg_mismatch_id;
+	u32 total_reg_mismatch_ref_obj_id;
+	u32 total_reg_mismatch_offset;
+	u32 total_reg_mismatch_frameno;
+	u32 total_reg_mismatch_other;
 
 	/* Track instruction with most mismatches for reporting */
 	u32 max_mismatch_insn_idx;
