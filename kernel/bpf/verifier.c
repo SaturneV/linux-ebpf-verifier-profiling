@@ -19776,6 +19776,11 @@ static inline void track_reg_mismatch_field(struct bpf_verifier_env *env,
 	}
 }
 
+/* Declaration of regsafe */
+static bool regsafe(struct bpf_verifier_env *env, struct bpf_reg_state *rold,
+		    struct bpf_reg_state *rcur, struct bpf_idmap *idmap,
+		    enum exact_level exact);
+
 /* Wrapper around regsafe that tracks which field caused mismatch */
 static bool regsafe_with_tracking(struct bpf_verifier_env *env,
 				   struct bpf_reg_state *rold,
