@@ -19801,49 +19801,33 @@ static bool regsafe_with_tracking(struct bpf_verifier_env *env,
 		return true;
 
 	/* Determine which field caused the mismatch */
-	/* Check type mismatch */
 	if (rold->type != rcur->type) {
 		field_matched = REG_MISMATCH_TYPE;
-	}
-	/* Check for range mismatch (min/max values) */
-	else if (rold->smin_value != rcur->smin_value ||
-		 rold->smax_value != rcur->smax_value ||
-		 rold->umin_value != rcur->umin_value ||
-		 rold->umax_value != rcur->umax_value ||
-		 rold->s32_min_value != rcur->s32_min_value ||
-		 rold->s32_max_value != rcur->s32_max_value ||
-		 rold->u32_min_value != rcur->u32_min_value ||
-		 rold->u32_max_value != rcur->u32_max_value) {
+	} else if (rold->smin_value != rcur->smin_value ||
+		   rold->smax_value != rcur->smax_value ||
+		   rold->umin_value != rcur->umin_value ||
+		   rold->umax_value != rcur->umax_value ||
+		   rold->s32_min_value != rcur->s32_min_value ||
+		   rold->s32_max_value != rcur->s32_max_value ||
+		   rold->u32_min_value != rcur->u32_min_value ||
+		   rold->u32_max_value != rcur->u32_max_value) {
 		field_matched = REG_MISMATCH_RANGE;
-	}
-	/* Check for variable offset mismatch */
-	else if (rold->var_off.value != rcur->var_off.value ||
-		 rold->var_off.mask != rcur->var_off.mask) {
+	} else if (rold->var_off.value != rcur->var_off.value ||
+		   rold->var_off.mask != rcur->var_off.mask) {
 		field_matched = REG_MISMATCH_VAR_OFF;
-	}
-	/* Check for offset field mismatch */
-	else if (rold->off != rcur->off) {
+	} else if (rold->off != rcur->off) {
 		field_matched = REG_MISMATCH_OFFSET;
-	}
-	/* Check for id mismatch */
-	else if (rold->id != rcur->id) {
+	} else if (rold->id != rcur->id) {
 		field_matched = REG_MISMATCH_ID;
-	}
-	/* Check for ref_obj_id mismatch */
-	else if (rold->ref_obj_id != rcur->ref_obj_id) {
+	} else if (rold->ref_obj_id != rcur->ref_obj_id) {
 		field_matched = REG_MISMATCH_REF_OBJ_ID;
-	}
-	/* Check for frameno mismatch (only for STACK pointers) */
-	else if (base_type(rold->type) == PTR_TO_STACK &&
-		 rold->frameno != rcur->frameno) {
+	} else if (base_type(rold->type) == PTR_TO_STACK &&
+		   rold->frameno != rcur->frameno) {
 		field_matched = REG_MISMATCH_FRAMENO;
-	}
-	/* Default to other if we couldn't determine the specific field */
-	else {
+	} else {
 		field_matched = REG_MISMATCH_OTHER;
 	}
 
-	/* Track the mismatch */
 	if (field_matched != REG_MISMATCH_NONE) {
 		track_reg_mismatch_field(env, insn_idx, field_matched);
 		if (mismatch_field_out)
@@ -26035,35 +26019,38 @@ exit:
 	return err;
 }
 
-/* Emit verifier state comparison statistics through structured tracepoints */
+/* Emit verifier state comparison statistics through structured tracepoints.
+ *
+ * Both tracepoints use exactly 12 TP_PROTO args to stay within the limit
+ * imposed by the BPF tracepoint probe infrastructure (bpf_probe.h).
+ *
+ * Packing scheme — value_a packed in low 32 bits, value_b in high 32 bits:
+ *
+ *   cmp_match_pair:  states_compared(low32) | states_matched(high32)
+ *
+ *   State-level mismatches — 8 categories in 4 pairs:
+ *     mismatch_pair1: cbdepth(low32)   | curframe(high32)
+ *     mismatch_pair2: spec(low32)      | sleepable(high32)
+ *     mismatch_pair3: refsafe(low32)   | callsite(high32)
+ *     mismatch_pair4: registers(low32) | stack(high32)
+ *
+ *   Register-field mismatches — all 8 sub-categories in 4 pairs:
+ *     reg_field_pair1: type(low32)       | range(high32)
+ *     reg_field_pair2: var_off(low32)    | id(high32)
+ *     reg_field_pair3: ref_obj_id(low32) | offset(high32)
+ *     reg_field_pair4: frameno(low32)    | other(high32)
+ */
 static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 {
 	u32 i, insn_cnt;
 
 	insn_cnt = env->prog->len;
 
-	/* DEBUG: Print to kernel log to verify function is called */
 	pr_info("[BPF_TELEMETRY] prog_name=%s prog_len=%u total_compared=%u total_matched=%u total_mismatched=%u\n",
 		env->prog->aux->name, insn_cnt,
-		env->total_states_compared, env->total_states_matched, env->total_states_mismatched);
+		env->total_states_compared, env->total_states_matched,
+		env->total_states_mismatched);
 
-	/* Emit aggregated per-program statistics via tracepoint - always emit for visibility */
-	trace_bpf_verifier_prog_stats(
-		env->prog->aux->name,
-		insn_cnt,
-		env->total_states_compared,
-		env->total_states_matched,
-		env->total_states_mismatched,
-		/* Pack mismatch categories into u64 pairs to stay within 12-arg limit */
-		((u64)env->total_mismatch_curframe << 32) | env->total_mismatch_callback_depth,
-		((u64)env->total_mismatch_sleepable << 32) | env->total_mismatch_speculative,
-		((u64)env->total_mismatch_callsite << 32) | env->total_mismatch_refsafe,
-		((u64)env->total_mismatch_stack << 32) | env->total_mismatch_registers,
-		/* Pack register field mismatches into u64 pairs */
-		((u64)env->total_reg_mismatch_range << 32) | env->total_reg_mismatch_type,
-		((u64)env->total_reg_mismatch_id << 32) | env->total_reg_mismatch_var_off);
-
-	/* Log field-specific register mismatch stats to kernel log */
 	pr_info("[BPF_REG_FIELD_MISMATCH] type=%u range=%u var_off=%u id=%u ref_obj_id=%u offset=%u frameno=%u other=%u\n",
 		env->total_reg_mismatch_type,
 		env->total_reg_mismatch_range,
@@ -26074,44 +26061,64 @@ static void bpf_verifier_log_state_stats(struct bpf_verifier_env *env)
 		env->total_reg_mismatch_frameno,
 		env->total_reg_mismatch_other);
 
-	/* Emit aggregated per-instruction statistics via tracepoint */
+	/* Emit aggregated per-program statistics */
+	trace_bpf_verifier_prog_stats(
+		env->prog->aux->name,
+		insn_cnt,
+		env->total_states_mismatched,
+		/* cmp_match_pair */
+		((u64)env->total_states_matched    << 32) | env->total_states_compared,
+		/* State-level mismatch pairs */
+		((u64)env->total_mismatch_curframe        << 32) | env->total_mismatch_callback_depth,
+		((u64)env->total_mismatch_sleepable        << 32) | env->total_mismatch_speculative,
+		((u64)env->total_mismatch_callsite         << 32) | env->total_mismatch_refsafe,
+		((u64)env->total_mismatch_stack            << 32) | env->total_mismatch_registers,
+		/* Register-field mismatch pairs — all 8 fields */
+		((u64)env->total_reg_mismatch_range        << 32) | env->total_reg_mismatch_type,
+		((u64)env->total_reg_mismatch_id           << 32) | env->total_reg_mismatch_var_off,
+		((u64)env->total_reg_mismatch_offset       << 32) | env->total_reg_mismatch_ref_obj_id,
+		((u64)env->total_reg_mismatch_other        << 32) | env->total_reg_mismatch_frameno);
+
+	/* Emit aggregated per-instruction statistics */
 	for (i = 0; i < insn_cnt; i++) {
-		if (env->insn_aux_data[i].states_compared > 0) {
+		if (env->insn_aux_data[i].states_compared == 0)
+			continue;
+
 		trace_bpf_verifier_insn_stats(
 			env->prog->aux->name,
 			i,
-			env->insn_aux_data[i].states_compared,
-			env->insn_aux_data[i].states_matched,
 			env->insn_aux_data[i].states_mismatched,
-			/* Pack mismatch categories into u64 pairs to stay within 12-arg limit */
-			((u64)env->insn_aux_data[i].mismatch_curframe << 32) | env->insn_aux_data[i].mismatch_callback_depth,
-			((u64)env->insn_aux_data[i].mismatch_sleepable << 32) | env->insn_aux_data[i].mismatch_speculative,
-			((u64)env->insn_aux_data[i].mismatch_callsite << 32) | env->insn_aux_data[i].mismatch_refsafe,
-			((u64)env->insn_aux_data[i].mismatch_stack << 32) | env->insn_aux_data[i].mismatch_registers,
-			/* Pack register field mismatches into u64 pairs */
-			((u64)env->insn_aux_data[i].reg_mismatch_range << 32) | env->insn_aux_data[i].reg_mismatch_type,
-			((u64)env->insn_aux_data[i].reg_mismatch_id << 32) | env->insn_aux_data[i].reg_mismatch_var_off);
+			/* cmp_match_pair */
+			((u64)env->insn_aux_data[i].states_matched   << 32) | env->insn_aux_data[i].states_compared,
+			/* State-level mismatch pairs */
+			((u64)env->insn_aux_data[i].mismatch_curframe   << 32) | env->insn_aux_data[i].mismatch_callback_depth,
+			((u64)env->insn_aux_data[i].mismatch_sleepable  << 32) | env->insn_aux_data[i].mismatch_speculative,
+			((u64)env->insn_aux_data[i].mismatch_callsite   << 32) | env->insn_aux_data[i].mismatch_refsafe,
+			((u64)env->insn_aux_data[i].mismatch_stack      << 32) | env->insn_aux_data[i].mismatch_registers,
+			/* Register-field mismatch pairs — all 8 fields */
+			((u64)env->insn_aux_data[i].reg_mismatch_range      << 32) | env->insn_aux_data[i].reg_mismatch_type,
+			((u64)env->insn_aux_data[i].reg_mismatch_id         << 32) | env->insn_aux_data[i].reg_mismatch_var_off,
+			((u64)env->insn_aux_data[i].reg_mismatch_offset     << 32) | env->insn_aux_data[i].reg_mismatch_ref_obj_id,
+			((u64)env->insn_aux_data[i].reg_mismatch_other      << 32) | env->insn_aux_data[i].reg_mismatch_frameno);
 
-			/* Log field-specific mismatches for this instruction if any */
-			if (env->insn_aux_data[i].reg_mismatch_type ||
-			    env->insn_aux_data[i].reg_mismatch_range ||
-			    env->insn_aux_data[i].reg_mismatch_var_off ||
-			    env->insn_aux_data[i].reg_mismatch_id ||
-			    env->insn_aux_data[i].reg_mismatch_ref_obj_id ||
-			    env->insn_aux_data[i].reg_mismatch_offset ||
-			    env->insn_aux_data[i].reg_mismatch_frameno ||
-			    env->insn_aux_data[i].reg_mismatch_other) {
-				pr_info("[BPF_INSN_REG_FIELD_MISMATCH] insn=%u type=%u range=%u var_off=%u id=%u ref_obj_id=%u offset=%u frameno=%u other=%u\n",
-					i,
-					env->insn_aux_data[i].reg_mismatch_type,
-					env->insn_aux_data[i].reg_mismatch_range,
-					env->insn_aux_data[i].reg_mismatch_var_off,
-					env->insn_aux_data[i].reg_mismatch_id,
-					env->insn_aux_data[i].reg_mismatch_ref_obj_id,
-					env->insn_aux_data[i].reg_mismatch_offset,
-					env->insn_aux_data[i].reg_mismatch_frameno,
-					env->insn_aux_data[i].reg_mismatch_other);
-			}
+		if (env->insn_aux_data[i].reg_mismatch_type    ||
+		    env->insn_aux_data[i].reg_mismatch_range   ||
+		    env->insn_aux_data[i].reg_mismatch_var_off ||
+		    env->insn_aux_data[i].reg_mismatch_id      ||
+		    env->insn_aux_data[i].reg_mismatch_ref_obj_id ||
+		    env->insn_aux_data[i].reg_mismatch_offset  ||
+		    env->insn_aux_data[i].reg_mismatch_frameno ||
+		    env->insn_aux_data[i].reg_mismatch_other) {
+			pr_info("[BPF_INSN_REG_FIELD_MISMATCH] insn=%u type=%u range=%u var_off=%u id=%u ref_obj_id=%u offset=%u frameno=%u other=%u\n",
+				i,
+				env->insn_aux_data[i].reg_mismatch_type,
+				env->insn_aux_data[i].reg_mismatch_range,
+				env->insn_aux_data[i].reg_mismatch_var_off,
+				env->insn_aux_data[i].reg_mismatch_id,
+				env->insn_aux_data[i].reg_mismatch_ref_obj_id,
+				env->insn_aux_data[i].reg_mismatch_offset,
+				env->insn_aux_data[i].reg_mismatch_frameno,
+				env->insn_aux_data[i].reg_mismatch_other);
 		}
 	}
 }
