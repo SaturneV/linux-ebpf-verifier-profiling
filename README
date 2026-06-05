@@ -1,3 +1,12 @@
+╔════════════════════════════════════════════════════════════════════╗
+║ Modified Linux kernel (6.19.0) for BPF verifier instrumentation    ║
+║════════════════════════════════════════════════════════════════════║
+║ This repository uses a modified Linux kernel (version 6.19.0)      ║
+║ that enables BPF verifier instrumentation. These kernel            ║
+║ modifications are part of the bpf-verifier-telemetry project:      ║
+║ https://github.com/SaturneV/bpf-verifier-telemetry                 ║
+╚════════════════════════════════════════════════════════════════════╝
+
 Linux kernel
 ============
 
